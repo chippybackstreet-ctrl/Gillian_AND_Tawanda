@@ -1,0 +1,210 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Spudkin’s Doom</title>
+<link href="https://fonts.googleapis.com/css2?family=VT323&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#352879;--fg:#c4b9ff;--bd:#7869c4;--hi:#ffffff;--evil:#ff8a94;--hachi:#ffd47a;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#241a5c;--fg:#b4a8f5;--bd:#5a4da8}}
+:root[data-theme="dark"]{--bg:#241a5c;--fg:#b4a8f5;--bd:#5a4da8}
+*{box-sizing:border-box}
+html{height:100%;scroll-padding-top:env(safe-area-inset-top,0px)}
+body{height:100%;margin:0;padding:10px;background:var(--bd);font-family:"VT323","Courier New",monospace;font-size:21px;color:var(--fg)}
+#scr{background:var(--bg);height:100%;display:flex;flex-direction:column;padding:10px;gap:8px}
+#log{flex:1;overflow-y:auto;line-height:1.15;min-height:0}
+#log div{white-space:pre-wrap;margin:0 0 6px;max-width:70ch}
+.cmd{color:var(--hi)}.room{color:var(--hi);text-decoration:underline}.evil{color:var(--evil)}.hachi{color:var(--hachi)}
+#st{border-top:2px solid var(--fg);padding-top:4px;font-size:18px}
+#ctl{display:flex;gap:10px;align-items:flex-start}
+#nav{display:grid;grid-template-columns:repeat(3,44px);grid-template-rows:repeat(3,44px);gap:3px;flex:none}
+#acts{display:flex;flex-wrap:wrap;gap:5px;max-height:140px;overflow-y:auto}
+button{font:inherit;background:transparent;color:var(--fg);border:2px solid var(--fg);padding:2px 8px;cursor:pointer;min-height:36px}
+#nav button{padding:0;min-height:0}
+button:hover,button:active{background:var(--fg);color:var(--bg)}
+button:disabled{opacity:.3;cursor:default;background:transparent;color:var(--fg)}
+button:focus-visible,input:focus-visible{outline:3px solid var(--hi);outline-offset:2px}
+#row{display:flex;gap:6px;align-items:center}
+#in{flex:1;min-width:0;font:inherit;background:transparent;color:var(--hi);border:2px solid var(--fg);padding:4px 8px;caret-color:var(--hi)}
+</style>
+</head>
+<body>
+<div id="scr">
+<div id="log" aria-live="polite"></div>
+<div id="st"></div>
+<div id="ctl">
+<div id="nav">
+<span></span><button data-d="n" aria-label="North">N</button><span></span>
+<button data-d="w" aria-label="West">W</button><span></span><button data-d="e" aria-label="East">E</button>
+<span></span><button data-d="s" aria-label="South">S</button><span></span>
+</div>
+<div id="acts"></div>
+</div>
+<div id="row"><span>&gt;</span><input id="in" autocomplete="off" autocapitalize="off" spellcheck="false" aria-label="Type a command"></div>
+</div>
+<script>
+const $=id=>document.getElementById(id);
+let S;
+const NPC={queen:["queen","mum"],toffee:["toffee","nose"],calista:["calista"],dragor:["dragor","dragon"],witches:["witch","witches","emily","woo","nena"],pirates:["pirate","pirates"],spudkin:["spudkin","doctor","dr"]};
+const NAME={queen:"the Queen",toffee:"Toffee Nose",calista:"Calista",dragor:"Dragor",witches:"the witches",pirates:"the pirates",spudkin:"Dr Spudkin"};
+const DN={n:"north",s:"south",e:"east",w:"west"};
+const CHANT="Sinister voices, out of view, chant:\n“Evil Doctor Spudkin, Evil Doctor Spudkin, Evil Doctor Spudkin, We Love You.”";
+const HACHI=["Hachi: Oh good, more walking. You two are such losers.","Hachi: Take your time. It’s not like I’m starving or anything.","Hachi: I’m not saying you’re slow. I’m saying snails are lapping you.","Hachi: Fine. I’ll just wait here. Alone. Hungry. Loser.","Hachi: Cake would be nice. But sure, carry on, losers.","Hachi: Sometimes I just want eggiss and there’s no eggiss. Why didn’t ya bring eggiss","Hachi: Why am I hanging around with losers?","Hachi: He says well done everyone. Not"];
+const PALQ=["Hachi is being Hachi again. Ignore him.","Do you think the Queen packed enough sandwiches?","Spudkin won’t know what hit him.","Keep going. We’re doing brilliantly."];
+const R={
+kitchen:{t:"The Palace Kitchen",ex:{e:"lawn"},d:()=>"Copper pots hang over a vast table. The Queen is buttering bread beside a wobbling tower of cucumber slices."+(S.cl?" "+S.cl+" chocolate cake"+(S.cl>1?"s cool":" cools")+" on the window ledge.":"")},
+lawn:{t:"Palace Lawn",ex:{w:"kitchen",e:"road"},d:()=>"The sunny lawn of Octavia Palace. A table with a white cloth waits, empty. Hachi sits on your foot."},
+road:{t:"Sylvanian Road",ex:{w:"lawn",e:"wood",s:"harbour"},d:()=>"A dusty road crosses into Sylvania. "+(S.toffee?"A puddle sits unjudged.":"Toffee Nose stands in the middle of it, inspecting a puddle with great distaste.")},
+wood:{t:"Whispering Wood",ex:{w:"road",n:"marsh"},d:()=>"Tall pines creak overhead. "+(S.calista?"A branch swings, empty.":"Calista sits on a branch, bouncing her flying shoes.")},
+marsh:{t:"Witch Marsh",ex:{s:"wood",e:"cave"},d:()=>"Green bubbles pop on black water. "+(S.witch?"The cauldron is upside down and the track east is clear.":"Emily Wicked, Witchy Woo and Nasty Nena stir a cauldron across the only track east.")},
+cave:{t:"Dragor’s Cave",ex:{w:"marsh"},d:()=>S.dh?"Dragor is awake, flexing his wings. A mountain of gold glitters behind him.":S.drag?"Dragor is awake and grumpy, blinking at you.":"A mountain of gold coins rises and falls with a mighty snore. Dragor is curled on top, smoke drifting from his nostrils."},
+harbour:{t:"Pirate Harbour",ex:{n:"road",e:"ship"},d:()=>S.pir?"Burnt sails flap in the wind. The gangplank is clear, and the ship waits to the east.":"A black ship, the Rotten Spud, floats at the dock. A dozen pirates guard the gangplank."},
+ship:{t:"Deck of the Rotten Spud",ex:{w:"harbour"},d:()=>"The black deck creaks. A skull flag shows a face that looks suspiciously like a potato. Evil Dr Spudkin stands at the wheel, crackling with dark power."}
+};
+const out=(t,c)=>{const e=document.createElement("div");if(c)e.className=c;e.textContent=t;$("log").appendChild(e);$("log").scrollTop=1e9};
+const here=()=>{const l=S.loc,a=[];
+if(l=="kitchen")a.push("queen");
+if(l=="road"&&!S.toffee)a.push("toffee");
+if(l=="wood"&&!S.calista)a.push("calista");
+if(l=="marsh"&&!S.witch)a.push("witches");
+if(l=="cave")a.push("dragor");
+if(l=="harbour"&&!S.pir)a.push("pirates");
+if(l=="ship")a.push("spudkin");
+return a};
+function init(){S={loc:"lawn",sw:0,cake:0,cl:2,pow:0,bul:false,gs:false,toffee:false,calista:false,sh:0,drag:false,dh:false,witch:false,pir:false,over:false};
+$("log").textContent="";
+out("**** SPUDKIN’S DOOM ****","room");
+out("Evil Dr Spudkin, pirate and wicked wizard, plans to rule the known world. Princess Gillian of Octavia and Princess Tawanda of Sylvania must stop him, with Hachi the Labrador at their heels.\nType commands (GO EAST, TALK QUEEN, EAT SANDWICH) or tap the buttons. HELP lists commands.");
+out("Choose your princess: Gillian of Octavia or Tawanda of Sylvania. The other will be at your side.");render()}
+function pick(c){S.me=c=="@g"?"Gillian":"Tawanda";S.pal=c=="@g"?"Tawanda":"Gillian";const k=n=>n=="Gillian"?"Octavia":"Sylvania";
+out("You are Princess "+S.me+" of "+k(S.me)+". Your best friend, Princess "+S.pal+" of "+k(S.pal)+", is beside you, and Hachi the Labrador is already complaining.");look();render()}
+function look(){const r=R[S.loc],h=here();out(r.t,"room");out(r.d());
+if(h.length)out("You see: "+h.map(k=>NAME[k]).join(", ")+".");
+out("Exits: "+Object.keys(r.ex).map(d=>DN[d]+" ("+R[r.ex[d]].t+")").join(", ")+".")}
+function go(d){const nx=R[S.loc].ex[d];
+if(!nx){out("You can’t go that way.");return}
+if(S.loc=="marsh"&&d=="e"){
+if(!S.witch){out("The witches cackle and block the track. You will have to deal with them first.");return}
+if(!S.calista){out("The bog east of the track is too deep to wade. If only someone could fly you across.");return}
+out("Calista’s flying shoes lift the princesses (and one reluctant Labrador) over the bog.")}
+if(S.loc=="harbour"&&d=="e"&&!S.pir){out("The pirates wave cutlasses. “Arr, not so fast!” There are far too many of them.");return}
+S.loc=nx;look();
+if(nx=="ship")out(CHANT,"evil");
+if(Math.random()<.4)out(HACHI[Math.floor(Math.random()*HACHI.length)],"hachi");
+else if(Math.random()<.3)out(S.pal+": “"+PALQ[Math.floor(Math.random()*PALQ.length)]+"”")}
+function feed(){if(S.bul){out("Hachi already has Bulliss. Save the cake for the next big fight.");return}
+if(!S.cake){out("You have no chocolate cake.");return}
+S.cake--;S.bul=true;out("Hachi swallows the cake whole. His fur ripples and a swaggering aura rises around him: BULLISS!\nHachi: “Who’s the loser now?”","hachi")}
+function eat(){if(!S.sw){out("You have no cucumber sandwiches.");return}
+S.sw--;S.pow++;out("You and "+S.pal+" munch together. Magic tingles to their fingertips. Power is now "+S.pow+".")}
+function talk(k){const h=here();if(!h.includes(k)){out("There is nobody like that here.");return}
+if(k=="queen"){if(!S.gs){S.gs=true;S.sw+=5;out("Queen: “Take these, my darlings. Cucumber sandwiches make your magic strong.” She hands over a hamper with 5 sandwiches. “Chocolate cake is for emergencies. Hachi knows why.”")}else out("The Queen waves her butter knife. “Off you go, saving the world.”")}
+else if(k=="toffee")out("Toffee Nose: “I don’t speak to people with empty hands. A sandwich, perhaps, if it’s cucumber and not horrid.”");
+else if(k=="calista"){S.calista=true;out("Calista: “"+S.me+"! "+S.pal+"! My flying shoes and I are at your service!” She joins you.")}
+else if(k=="dragor"){if(!S.drag)out("Dragor snores. A smoke ring floats up. He won’t wake for a whisper. Try a proper SHOUT.");else if(!S.dh)out("Dragor: “A sandwich, little princess, and I may think about toasting some pirates.”");else out("Dragor: “Go. I’ll follow. The gold can wait.”")}
+else if(k=="witches")out("Emily Wicked: “Spudkin will rule everything!” Witchy Woo: “Hee hee!” Nasty Nena: “Go home!” Talking won’t shift them. Try fighting.");
+else if(k=="pirates")out("Pirates: “Arr! Walk the plank!” They look like they would respect only fire.");
+else if(k=="spudkin")out("Spudkin: “Ha! Two princesses and a fat dog. I shall rule the known world!”\n"+CHANT,"evil")}
+function give(it,k,hc){if(!it){out("Give what?");return}
+if(!S[it]){out("You have none.");return}
+if(hc){if(it=="cake")feed();else out("Hachi sniffs the sandwich. “Cucumber? That’s a salad with delusions. Loser.”","hachi");return}
+const h=here();
+if(k=="toffee"&&h.includes("toffee")&&it=="sw"){S.sw--;S.toffee=true;out("Toffee Nose nibbles the sandwich. “Acceptable. Barely.” She joins you and sniffs: “Dragor sleeps beyond the Witch Marsh. He wakes only for a proper SHOUT, and you will need him against the pirates at the harbour.”");return}
+if(k=="dragor"&&it=="sw"){if(!S.drag){out("Dragor is fast asleep. Shouting comes first.");return}if(S.dh){out("Dragor already has a sandwich.");return}S.sw--;S.dh=true;out("Dragor eats the sandwich in one bite. “Delicious. Fine, I’ll help. Lead on, princesses.” He will follow you.");return}
+out("Nobody wants that right now.")}
+function shout(){if(S.loc!="cave"){out("You shout as loudly as you can. Hachi: “Subtle.” Nothing else happens.","hachi");return}
+if(S.drag){out("Dragor: “I’M AWAKE! Stop shouting!”");return}
+S.sh++;
+if(S.sh==1)out("“EXCUSE ME!” Dragor’s tail twitches. A coin slides off the pile.");
+else if(S.sh==2)out("“WAKE UP!” One huge yellow eye opens, then closes.");
+else{S.drag=true;out("“DRAGOR!!!” The cave shakes. Dragor sits up in a shower of gold. “WHO DARES DISTURB MY GOLD?” He squints at you and "+S.pal+". “Oh. Princesses. What do you want?”")}}
+function fight(){const l=S.loc,h=here();
+if(l=="marsh"&&!S.witch){
+if(!S.bul){out("Without Bulliss, Hachi is merely chubby. The witches laugh. Feed him chocolate cake first.");return}
+if(S.pow<1){out("Your magic fizzles. Eat a cucumber sandwich first.");return}
+S.witch=true;S.bul=false;out("Hachi’s Bulliss swells. “LOSERS!” he barks. Cucumber magic zaps from you and "+S.pal+". Emily Wicked, Witchy Woo and Nasty Nena shriek and tumble into their own cauldron. The track east is clear. Hachi’s aura fades.");return}
+if(l=="harbour"&&!S.pir){
+if(!S.dh){out("Two princesses and a Labrador against twelve pirates? No. You need something with fire.");return}
+S.pir=true;out("DRAGOR swoops down and torches every sail. The pirates jump into the sea. The gangplank is clear.");return}
+if(l=="ship"){if(!S.bul&&!S.cake&&!S.gal){S.gal=true;S.cake++;out("Hachi sniffs out the pirates’ galley and trots back with a stolen chocolate cake. Feed it to him!");return}const m=[];
+if(!S.bul)m.push("Hachi needs Bulliss (feed him cake)");
+if(S.pow<2)m.push("your magic is too weak (eat sandwiches until Power is 2)");
+if(!S.toffee)m.push("you need Toffee Nose’s withering snobbery");
+if(m.length){out("Spudkin blasts you back with a purple bolt. “Ha!” You aren’t ready: "+m.join("; ")+".","evil");return}
+out(CHANT,"evil");
+out("Hachi lunges with Bulliss. Toffee Nose looks Spudkin up and down: “A pirate? How common.” He cracks. You and "+S.pal+" join hands, cucumber magic crackling, and ZAP! Evil Dr Spudkin shrinks into a small, damp potato and rolls into the sea. The pirates surrender. The world is saved!");
+out("Dragor yawns, flies home, settles on his gold and goes back to sleep.\nOn the palace lawn, you and "+S.pal+" find the Queen waiting with a table.\n“I’m the queen,” she announces, and serves a grand cucumber sandwich tea on the lawn for everyone, including Calista and Toffee Nose.\nHachi is presented with an enormous chocolate cake. “Fine,” he says. “You’re not total losers.”\n\nTHE END","room");
+S.over=true;return}
+out("There is nothing to fight here.")}
+function hint(){let g,t;
+if(!S.gs){g="kitchen";t="Talk to the Queen."}
+else if(S.cl>0){g="kitchen";t="Take both chocolate cakes. You need one for each big fight."}
+else if(!S.toffee){g="road";t="Give a sandwich to Toffee Nose."}
+else if(!S.calista){g="wood";t="Talk to Calista."}
+else if(!S.witch){g="marsh";t="Eat a sandwich, feed Hachi cake, then fight the witches."}
+else if(!S.drag){g="cave";t="Shout three times."}
+else if(!S.dh){g="cave";t="Give Dragor a sandwich."}
+else if(!S.pir){g="harbour";t="Fight the pirates."}
+else{g="ship";t="Reach Power 2, feed Hachi the second cake, then fight Spudkin."}
+if(S.loc==g){out("Hint: "+t,"hachi");return}
+const prev={[S.loc]:1},first={},q=[S.loc];
+while(q.length){const c=q.shift();for(const d in R[c].ex){const n=R[c].ex[d];if(!(n in prev)){prev[n]=1;first[n]=c==S.loc?d:first[c];q.push(n)}}}
+const d=first[g];
+out("Hint: go "+DN[d]+" ("+R[R[S.loc].ex[d]].t+") to head for "+R[g].t+". When you get there: "+t[0].toLowerCase()+t.slice(1),"hachi")}
+function hintOld(){let t;
+if(!S.gs)t="Go west to the kitchen and talk to the Queen.";
+else if(S.cl>0)t="Take both chocolate cakes in the kitchen. You need one for each big fight.";
+else if(!S.toffee)t="Go east from the lawn to Sylvanian Road and give a sandwich to Toffee Nose.";
+else if(!S.calista)t="Go east to Whispering Wood and talk to Calista.";
+else if(!S.witch)t="Go north to Witch Marsh. Eat a sandwich, feed Hachi cake, then fight.";
+else if(!S.drag)t="Go east from the marsh to Dragor’s Cave and shout three times.";
+else if(!S.dh)t="Give Dragor a sandwich.";
+else if(!S.pir)t="Go back to Sylvanian Road, south to the harbour, and fight the pirates.";
+else t="Go east to the ship. First reach Power 2 (eat sandwiches) and feed Hachi the second cake, then fight.";
+out("Hint: "+t,"hachi")}
+function run(c){c=c.trim().toLowerCase();if(!c)return;out("> "+c,"cmd");
+if(!S.me){out("Choose your princess first: tap a button above.");return}
+if(S.over){out("The game is over. Press Play again.");return}
+const w=c.replace(/[^a-z ]/g,"").split(/\s+/).filter(x=>!["the","to","at","a","an","with","up","on","some","of"].includes(x));
+const v=w[0],D={n:"n",north:"n",s:"s",south:"s",e:"e",east:"e",w:"w",west:"w"};
+const it=w.some(x=>/sandwich|cucumber/.test(x))?"sw":w.some(x=>/cake|chocolate/.test(x))?"cake":null;
+const k=Object.keys(NPC).find(n=>NPC[n].some(x=>w.includes(x)));
+const hc=w.includes("hachi")||w.includes("dog");
+const d=D[v]||(["go","walk","run"].includes(v)&&D[w[1]]);
+if(d)go(d);
+else if(v=="look"||v=="l")look();
+else if(v=="inv"||v=="i"||v=="inventory"){out("Sandwiches: "+S.sw+"  Cakes: "+S.cake+"  Power: "+S.pow+"\nParty: "+S.me+", "+S.pal+", Hachi"+(S.toffee?", Toffee Nose":"")+(S.calista?", Calista":"")+(S.dh?", Dragor":"")+".")}
+else if(v=="take"||v=="get"||v=="grab"){if(it=="cake"&&S.loc=="kitchen"&&S.cl>0){S.cl--;S.cake++;out("You take a chocolate cake. Hachi stares at it, unblinking.")}else out("You can’t take that.")}
+else if(v=="eat")eat();
+else if(v=="feed")it=="sw"?give("sw",null,true):feed();
+else if(v=="give"){give(it,k,hc)}
+else if(v=="talk"||v=="ask"||v=="speak"){k?talk(k):out("Talk to whom?")}
+else if(v=="shout"||v=="yell"||v=="scream"||v=="wake")shout();
+else if(v=="fight"||v=="attack"||v=="zap")fight();
+else if(v=="board"&&S.loc=="harbour")go("e");
+else if(v=="hint")hint();
+else if(v=="help")out("Commands: N S E W, LOOK, INVENTORY, TAKE CAKE, EAT SANDWICH, FEED CAKE, GIVE SANDWICH TOFFEE, TALK <name>, SHOUT, FIGHT, BOARD.");
+else out("Hachi: “Wow. You can’t even type a command. Losers.” (Try HELP.)","hachi");
+render()}
+function render(){const a=[],h=here();$("acts").textContent="";
+if(!S.me)a.push(["Play as Gillian","@g"],["Play as Tawanda","@t"]);
+else if(S.over)a.push(["Play again","@restart"]);
+else{a.push(["Look","look"],["Inventory","inv"],["Hint","hint"]);
+h.forEach(k=>a.push(["Talk: "+NAME[k],"talk "+k]));
+if(S.loc=="kitchen"&&S.cl>0)a.push(["Take cake","take cake"]);
+if(S.sw)a.push(["Eat sandwich","eat sandwich"]);
+if(S.cake)a.push(["Feed Hachi cake","feed cake"]);
+if(S.sw&&h.includes("toffee"))a.push(["Give sandwich to Toffee Nose","give sandwich toffee"]);
+if(S.sw&&S.drag&&!S.dh&&S.loc=="cave")a.push(["Give sandwich to Dragor","give sandwich dragor"]);
+if(S.loc=="cave"&&!S.drag)a.push(["SHOUT!","shout"]);
+if(["marsh","harbour","ship"].includes(S.loc)&&h.length)a.push(["Fight","fight"])}
+a.forEach(([l,c])=>{const b=document.createElement("button");b.textContent=l;b.onclick=()=>c=="@restart"?init():c[0]=="@"?pick(c):run(c);$("acts").appendChild(b)});
+document.querySelectorAll("#nav button").forEach(b=>b.disabled=!S.me||S.over||!R[S.loc].ex[b.dataset.d]);
+$("st").textContent="Power "+S.pow+"  Sandwiches "+S.sw+"  Cakes "+S.cake+"  Hachi: "+(S.bul?"BULLISS!":"calm")}
+document.querySelectorAll("#nav button").forEach(b=>b.onclick=()=>run("go "+DN[b.dataset.d]));
+$("in").addEventListener("keydown",e=>{if(e.key=="Enter"){run($("in").value);$("in").value=""}});
+init();
+</script>
+</body>
+</html>
